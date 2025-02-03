@@ -1,88 +1,94 @@
 <?php
-//Este post guarda la ruta de la imagen en la base de datos
-
-// Conexión a la base de datos
-require_once('../../util/manejoCore.php');
+// Incluir la conexión a la base de datos
 require_once('../../config/conexion.php');
 
+// Configurar los encabezados CORS
+header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: PUT, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 
+// Manejar la solicitud OPTIONS (preflight)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
-$id = $_POST["id"];
-$nombre= $_POST["nombre"];
-$categoria = $_POST["categoria"];
-$precio = $_POST["precio"];
-$descuento = $_POST["descuento"];
-$rating= $_POST["rating"];
-$stock = $_POST["stock"];
-$marca = $_POST["marca"];
+// Verificar si se recibió un ID válido
+if (!isset($_POST['id']) || empty($_POST['id'])) {
+    http_response_code(400);
+    echo json_encode(array("message" => "ID del producto no proporcionado."));
+    exit();
+}
 
+// Obtener los datos del formulario
+$id = $_POST['id'];
+$nombre = $_POST['nombre'];
+$categoria = $_POST['categoria'];
+$precio = $_POST['precio'];
+$descuento = $_POST['descuento'];
+$rating = $_POST['rating'];
+$stock = $_POST['stock'];
+$marca = $_POST['marca'];
 
-// Manejo de la imagen
-$miniatura = $_FILES["miniatura"];
-$nombreMiniatura = $miniatura["name"];
-$tipoImagen = strtolower(pathinfo($nombreMiniatura, PATHINFO_EXTENSION));
-$directorio = "../../img/productos/";
+// Preparar la consulta SQL para actualizar el producto
+$sql = "UPDATE productos SET 
+        nombre = ?, 
+        categoria = ?, 
+        precio = ?, 
+        descuento = ?, 
+        rating = ?, 
+        stock = ?, 
+        marca = ? 
+        WHERE id = ?";
 
+// Preparar la sentencia
+$stmt = $conn->prepare($sql);
 
+if (!$stmt) {
+    http_response_code(500);
+    echo json_encode(array("message" => "Error al preparar la consulta."));
+    exit();
+}
 
+// Vincular los parámetros
+$stmt->bind_param(
+    "ssddddsi", 
+    $nombre, 
+    $categoria, 
+    $precio, 
+    $descuento, 
+    $rating, 
+    $stock, 
+    $marca, 
+    $id
+);
 
-    if (is_file($miniatura)) {
-        if ($tipoImagen == "jpg" or $tipoImagen == "jpeg" or $tipoImagen == "png") {
+// Ejecutar la consulta
+if ($stmt->execute()) {
+    // Manejar la imagen si se proporcionó
+    if (!empty($_FILES['miniatura']['name'])) {
+        $target_dir = "../../img/";
+        $target_file = $target_dir . basename($_FILES["miniatura"]["name"]);
 
-            try {
-                unlink($miniatura);
-            } catch (\Throwable $th) {
-                //throw $th;
-            }
-
-            $ruta = $directorio . $id . "." . $tipoImagen;
-
-            if (move_uploaded_file($miniatura, $ruta)) {
-
-                $editar = $conexion->query("UPDATE productos SET miniatura = '$ruta' WHERE id = $id;");
-                if ($editar==1) {
-                    # code...
-                } else {
-                    # code...
-                }
-            }
-        } else {
-            # code...
+        // Mover la imagen al directorio de imágenes
+        if (move_uploaded_file($_FILES["miniatura"]["tmp_name"], $target_file)) {
+            // Actualizar la ruta de la imagen en la base de datos
+            $sql_img = "UPDATE productos SET miniatura = ? WHERE id = ?";
+            $stmt_img = $conn->prepare($sql_img);
+            $stmt_img->bind_param("si", $target_file, $id);
+            $stmt_img->execute();
+            $stmt_img->close();
         }
-    } else {
-        # code...
     }
-    // Mover la imagen al directorio
-    if (move_uploaded_file($miniatura["tmp_name"], $ruta)) {
-        // Decodificar entidades HTML
-        $nombre   = html_entity_decode($nombre);
-        $categoria   = html_entity_decode($categoria);
-        $marca     = html_entity_decode($marca);
 
-        // Preparar y ejecutar la consulta
-        $sql = "INSERT INTO productos (nombre, categoria, precio, descuento, rating, stock, marca, miniatura) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $conn->prepare($sql);
+    http_response_code(200);
+    echo json_encode(array("message" => "Producto actualizado correctamente."));
+} else {
+    http_response_code(500);
+    echo json_encode(array("message" => "Error al actualizar el producto."));
+}
 
-        if ($stmt === false) {
-            die(json_encode(["success" => false, "message" => "Error en la preparación de la consulta: " . $conn->error]));
-        }
-
-        // Bind params con el tipo correcto
-        $stmt->bind_param("ssdddiss", $nombre, $categoria, $precio, $descuento, $rating, $stock, $marca, $ruta);
-
-        if ($stmt->execute()) {
-            echo json_encode(["success" => true, "message" => "Nuevo producto agregado exitosamente."]);
-        } else {
-            error_log("Error al agregar producto: " . $stmt->error);
-            echo json_encode(["success" => false, "message" => "Ocurrió un error al agregar el producto."]);
-        }
-    } else {
-        echo json_encode(["success" => false, "message" => "Error al subir la imagen."]);
-    }
-
-
-// Cerrar conexión
+// Cerrar la conexión
 $stmt->close();
 $conn->close();
-
 ?>
