@@ -13,22 +13,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+// Obtener los datos del cuerpo de la solicitud
+$data = json_decode(file_get_contents("php://input"), true);
+
 // Verificar si se recibió un ID válido
-if (!isset($_POST['id']) || empty($_POST['id'])) {
+if (!isset($data['id']) || empty($data['id'])) {
     http_response_code(400);
     echo json_encode(array("message" => "ID del producto no proporcionado."));
     exit();
 }
 
-// Obtener los datos del formulario
-$id = $_POST['id'];
-$nombre = $_POST['nombre'];
-$categoria = $_POST['categoria'];
-$precio = $_POST['precio'];
-$descuento = $_POST['descuento'];
-$rating = $_POST['rating'];
-$stock = $_POST['stock'];
-$marca = $_POST['marca'];
+// Obtener los datos del producto
+$id = $data['id'];
+$nombre = $data['nombre'];
+$categoria = $data['categoria'];
+$precio = $data['precio'];
+$descuento = $data['descuento'];
+$rating = $data['rating'];
+$stock = $data['stock'];
+$marca = $data['marca'];
 
 // Preparar la consulta SQL para actualizar el producto
 $sql = "UPDATE productos SET 
@@ -65,22 +68,6 @@ $stmt->bind_param(
 
 // Ejecutar la consulta
 if ($stmt->execute()) {
-    // Manejar la imagen si se proporcionó
-    if (!empty($_FILES['miniatura']['name'])) {
-        $target_dir = "../../img/";
-        $target_file = $target_dir . basename($_FILES["miniatura"]["name"]);
-
-        // Mover la imagen al directorio de imágenes
-        if (move_uploaded_file($_FILES["miniatura"]["tmp_name"], $target_file)) {
-            // Actualizar la ruta de la imagen en la base de datos
-            $sql_img = "UPDATE productos SET miniatura = ? WHERE id = ?";
-            $stmt_img = $conn->prepare($sql_img);
-            $stmt_img->bind_param("si", $target_file, $id);
-            $stmt_img->execute();
-            $stmt_img->close();
-        }
-    }
-
     http_response_code(200);
     echo json_encode(array("message" => "Producto actualizado correctamente."));
 } else {
